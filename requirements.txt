@@ -1,0 +1,5 @@
+httpx>=0.28
+feedparser>=6.0
+trafilatura>=2.0
+PyYAML>=6.0
+keyring>=25.0

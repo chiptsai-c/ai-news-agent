@@ -1,0 +1,10 @@
+# Local environment
+.venv/
+__pycache__/
+*.pyc
+
+# Generated at runtime (news history, digests, logs)
+data/
+output/
+logs/
+*.bak*

@@ -1,0 +1,46 @@
+# type: rss (default) | hf_papers | hn
+# weight: priority boost when more items than max_triage are available
+# ai_only: false -> item must mention an AI keyword to be kept
+sources:
+  - name: OpenAI
+    url: https://openai.com/news/rss.xml
+    weight: 1.5
+  - name: Google DeepMind
+    url: https://deepmind.google/blog/rss.xml
+    weight: 1.5
+  - name: Google AI
+    url: https://blog.google/technology/ai/rss/
+    weight: 1.2
+  - name: Hugging Face Blog
+    url: https://huggingface.co/blog/feed.xml
+    weight: 1.2
+  - name: Hugging Face Daily Papers
+    url: https://huggingface.co/api/daily_papers
+    type: hf_papers
+    min_upvotes: 20
+    weight: 1.0
+  - name: Simon Willison
+    url: https://simonwillison.net/atom/everything/
+    weight: 1.2
+    ai_only: false
+  - name: The Verge AI
+    url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+    weight: 1.0
+  - name: TechCrunch AI
+    url: https://techcrunch.com/category/artificial-intelligence/feed/
+    weight: 1.0
+  - name: MIT Technology Review AI
+    url: https://www.technologyreview.com/topic/artificial-intelligence/feed
+    weight: 1.1
+  - name: VentureBeat AI
+    url: https://venturebeat.com/category/ai/feed/
+    weight: 0.9
+  - name: Hacker News
+    type: hn
+    query: ""          # all stories; the AI keyword filter keeps the relevant ones
+    min_points: 100
+    weight: 1.1
+    ai_only: false
+  - name: r/LocalLLaMA
+    url: https://www.reddit.com/r/LocalLLaMA/top/.rss?t=day
+    weight: 0.9

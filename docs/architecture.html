@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI News Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: single reading column; the pipeline diagram is the centrepiece, with the LLM lane on its right. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --fg: #1b1f27;
+  --muted: #5b6474;
+  --line: #d3d8e0;
+  --hot: #b45309;          /* LLM steps: the expensive, CPU-bound part */
+  --hot-tint: #fdf1e3;
+  --cool: #2f5f9e;         /* external systems */
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2e3542;
+    --hot: #f2a93b; --hot-tint: #2c2216; --cool: #8db4ec; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2e3542;
+  --hot: #f2a93b; --hot-tint: #2c2216; --cool: #8db4ec; color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--font-body); }
+.wrap { max-width: 880px; margin: 0 auto; padding-inline: 16px; padding-block: 40px 64px; display: grid; gap: 44px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--hot); }
+h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.15; font-weight: 600; margin: 0; text-wrap: balance; }
+h2 { font-size: 20px; font-weight: 600; margin: 0 0 14px; text-wrap: balance; }
+p { margin: 0; max-width: 66ch; }
+.lede { color: var(--muted); font-size: 17px; }
+.specs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.spec { font: 13px/1 var(--font-mono); border: 1px solid var(--line); border-radius: 4px; padding: 7px 10px; background: var(--surface); }
+
+/* Diagram */
+figure { margin: 0; display: grid; gap: 12px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+svg.arch { display: block; width: 100%; min-width: 640px; height: auto; color: var(--fg); font-family: var(--font-body); }
+.arch .boundary { fill: none; stroke: var(--muted); stroke-dasharray: 6 5; }
+.arch .step { fill: var(--surface); stroke: var(--line); }
+.arch .step.llm { fill: var(--hot-tint); stroke: var(--hot); }
+.arch .ext { fill: var(--surface); stroke: var(--cool); }
+.arch .side { fill: var(--surface); stroke: var(--line); }
+.arch .engine { fill: var(--hot-tint); stroke: var(--hot); stroke-width: 1.5; }
+.arch .name { font-size: 13px; font-weight: 600; fill: currentColor; }
+.arch .detail { font-size: 11.5px; fill: var(--muted); }
+.arch .count { font: 500 12px var(--font-mono); fill: currentColor; }
+.arch .label { font-size: 11px; fill: var(--muted); }
+.arch .hotlabel { font-size: 11px; fill: var(--hot); font-weight: 500; }
+.arch .extname { font-size: 13px; font-weight: 600; fill: var(--cool); }
+.arch .wire { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.arch .wire.hot { stroke: var(--hot); }
+.arch .wire.ext { stroke: var(--cool); }
+.arch .flow { stroke: var(--line); stroke-width: 2; }
+.arch .ah { fill: var(--muted); }
+.arch .ah.hot { fill: var(--hot); }
+.arch .ah.ext { fill: var(--cool); }
+.arch .badge { fill: var(--hot); }
+.arch .badgetext { font: 600 9.5px var(--font-mono); fill: var(--surface); letter-spacing: .05em; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 70ch; }
+.key { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+.sw.code { background: var(--surface); border-color: var(--line); }
+.sw.llm { background: var(--hot-tint); border-color: var(--hot); }
+.sw.ext { background: var(--surface); border-color: var(--cool); }
+
+/* Time budget */
+.budget { display: grid; gap: 12px; }
+.bar { display: flex; height: 34px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+.seg { display: flex; align-items: center; justify-content: center; font: 500 12px var(--font-mono); white-space: nowrap; overflow: hidden; }
+.seg.t { background: var(--hot); color: var(--surface); }
+.seg.m { background: color-mix(in srgb, var(--hot) 55%, var(--surface)); color: var(--fg); }
+.seg.s { background: color-mix(in srgb, var(--hot) 80%, var(--surface)); color: var(--surface); }
+.seg.d { background: color-mix(in srgb, var(--hot) 35%, var(--surface)); }
+.seg.o { background: var(--line); }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 20px; font-size: 13.5px; }
+.legend div { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.legend b { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 5.5ch; }
+.note { font-size: 13.5px; color: var(--muted); }
+
+/* Principles */
+.principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px 32px; }
+.principles div { min-width: 0; display: grid; gap: 4px; align-content: start; }
+.principles h3 { font-size: 15px; margin: 0; font-weight: 600; }
+.principles p { font-size: 14.5px; color: var(--muted); }
+
+/* Files */
+.table { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+td code { font: 13px var(--font-mono); white-space: nowrap; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Architecture · runs on one laptop</div>
+    <h1>AI News Agent</h1>
+    <p class="lede">A daily digest of the most important AI news, scored and summarised by Qwen3.5-4B running locally in Ollama. No cloud model, no GPU.</p>
+    <div class="specs">
+      <span class="spec">i7-8650U · 4 cores</span>
+      <span class="spec">16 GB RAM · no GPU</span>
+      <span class="spec">Qwen3.5-4B Q4_K_M · 3.4 GB</span>
+      <span class="spec">daily 07:00 · ~24 min</span>
+      <span class="spec">Telegram · Gmail · WhatsApp</span>
+    </div>
+  </header>
+
+  <figure>
+    <div class="scroll">
+      <svg class="arch" viewBox="0 0 760 930" role="img" aria-label="Pipeline: 12 news sources feed 11 steps on the laptop that narrow about 2,400 items to 12 stories. Four steps call Qwen3.5-4B through Ollama; the digest is saved to files and sent to Telegram and Gmail.">
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah hot" d="M0 0 L10 5 L0 10 z"/></marker>
+          <marker id="ae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah ext" d="M0 0 L10 5 L0 10 z"/></marker>
+        </defs>
+
+        <!-- External: news sources -->
+        <rect class="ext" x="40" y="16" width="400" height="50" rx="6"/>
+        <text class="extname" x="56" y="37">12 news sources</text>
+        <text class="detail" x="56" y="55">Lab blogs · tech news · HF Daily Papers · Hacker News · Reddit</text>
+        <line class="wire ext" x1="240" y1="66" x2="240" y2="173" marker-end="url(#ae)"/>
+        <text class="label" x="248" y="150">RSS / JSON APIs</text>
+
+        <!-- Laptop boundary -->
+        <rect class="boundary" x="20" y="96" width="730" height="726" rx="10"/>
+        <text class="label" x="36" y="118" style="font-weight:600">THIS LAPTOP</text>
+
+        <!-- Scheduler -->
+        <rect class="side" x="520" y="112" width="210" height="48" rx="6"/>
+        <text class="name" x="534" y="132">Task Scheduler</text>
+        <text class="detail" x="534" y="149">07:00 daily · no window → run.ps1</text>
+        <path class="wire" d="M520 136 H480 V197 H442" marker-end="url(#a)"/>
+        <text class="label" x="452" y="128">starts</text>
+
+        <!-- Main flow spine -->
+        <line class="flow" x1="240" y1="219" x2="240" y2="755"/>
+
+        <!-- Steps: y = 175 + i*58, h = 44 -->
+        <g>
+          <rect class="step" x="40" y="175" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="194">Collect</text><text class="detail" x="56" y="210">12 sources in parallel</text>
+          <text class="count" x="424" y="202" text-anchor="end">~2,400 items</text>
+
+          <rect class="step" x="40" y="233" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="252">Keep recent</text><text class="detail" x="56" y="268">last 26 h · AI keywords for general feeds</text>
+          <text class="count" x="424" y="260" text-anchor="end">~150</text>
+
+          <rect class="step" x="40" y="291" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="310">Drop already seen</text><text class="detail" x="56" y="326">same URL or near-identical title</text>
+          <text class="count" x="424" y="318" text-anchor="end">~100</text>
+
+          <rect class="step" x="40" y="349" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="368">Rank</text><text class="detail" x="56" y="384">source weight × keywords × freshness</text>
+          <text class="count" x="424" y="376" text-anchor="end">top 50</text>
+
+          <rect class="step llm" x="40" y="407" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="426">Triage</text><text class="detail" x="56" y="442">importance 1–10 + category, as JSON</text>
+          <text class="count" x="424" y="434" text-anchor="end">50 × 14 s</text>
+
+          <rect class="step llm" x="40" y="465" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="484">Merge duplicate stories</text><text class="detail" x="56" y="500">shared rare word → "same event?" yes/no</text>
+          <text class="count" x="424" y="492" text-anchor="end">~1.5 min</text>
+
+          <rect class="step" x="40" y="523" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="542">Fetch article text</text><text class="detail" x="56" y="558">top 12 · falls back to feed summary if blocked</text>
+          <text class="count" x="424" y="550" text-anchor="end">12</text>
+
+          <rect class="step llm" x="40" y="581" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="600">Summarise</text><text class="detail" x="56" y="616">headline · 3 bullets · why it matters</text>
+          <text class="count" x="424" y="608" text-anchor="end">12 × ~60 s</text>
+
+          <rect class="step llm" x="40" y="639" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="658">Write TL;DR</text><text class="detail" x="56" y="674">5 most important developments</text>
+          <text class="count" x="424" y="666" text-anchor="end">~40 s</text>
+
+          <rect class="step" x="40" y="697" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="716">Render</text><text class="detail" x="56" y="732">Markdown + HTML page</text>
+
+          <rect class="step" x="40" y="755" width="400" height="44" rx="6"/>
+          <text class="name" x="56" y="774">Deliver</text><text class="detail" x="56" y="790">skips any channel not set up</text>
+        </g>
+
+        <!-- LLM badges -->
+        <g>
+          <rect class="badge" x="330" y="414" width="30" height="15" rx="3"/><text class="badgetext" x="345" y="425" text-anchor="middle">LLM</text>
+          <rect class="badge" x="330" y="472" width="30" height="15" rx="3"/><text class="badgetext" x="345" y="483" text-anchor="middle">LLM</text>
+          <rect class="badge" x="330" y="588" width="30" height="15" rx="3"/><text class="badgetext" x="345" y="599" text-anchor="middle">LLM</text>
+          <rect class="badge" x="330" y="646" width="30" height="15" rx="3"/><text class="badgetext" x="345" y="657" text-anchor="middle">LLM</text>
+        </g>
+
+        <!-- History DB -->
+        <rect class="side" x="520" y="284" width="210" height="58" rx="6"/>
+        <text class="name" x="534" y="306">data\news.db</text>
+        <text class="detail" x="534" y="324">SQLite history of seen items</text>
+        <line class="wire" x1="442" y1="313" x2="518" y2="313" marker-start="url(#a)" marker-end="url(#a)"/>
+        <text class="label" x="452" y="305">check · save</text>
+
+        <!-- Ollama engine -->
+        <rect class="engine" x="520" y="407" width="210" height="276" rx="8"/>
+        <text class="hotlabel" x="534" y="430">OLLAMA · localhost:11434</text>
+        <text class="name" x="534" y="456">Qwen3.5-4B</text>
+        <text class="detail" x="534" y="474">Q4_K_M GGUF from Hugging Face</text>
+        <text class="detail" x="534" y="492">3.4 GB · 6 CPU threads</text>
+        <text class="count" x="534" y="526">reads  ~55 tok/s</text>
+        <text class="count" x="534" y="546">writes  ~5 tok/s</text>
+        <text class="detail" x="534" y="580">thinking off</text>
+        <text class="detail" x="534" y="598">JSON schema on every</text>
+        <text class="detail" x="534" y="614">structured call</text>
+        <text class="detail" x="534" y="648">model stays loaded</text>
+        <text class="detail" x="534" y="664">30 min between calls</text>
+
+        <line class="wire hot" x1="442" y1="429" x2="518" y2="429" marker-end="url(#ah)"/>
+        <text class="label" x="450" y="422">score</text>
+        <line class="wire hot" x1="442" y1="487" x2="518" y2="487" marker-end="url(#ah)"/>
+        <text class="label" x="450" y="480">yes / no</text>
+        <line class="wire hot" x1="442" y1="603" x2="518" y2="603" marker-end="url(#ah)"/>
+        <text class="label" x="450" y="596">summarise</text>
+        <line class="wire hot" x1="442" y1="661" x2="518" y2="661" marker-end="url(#ah)"/>
+        <text class="label" x="450" y="654">TL;DR</text>
+
+        <!-- Output files -->
+        <rect class="side" x="520" y="697" width="210" height="44" rx="6"/>
+        <text class="name" x="534" y="716">output\</text>
+        <text class="detail" x="534" y="732">date.md · date.html · latest.html</text>
+        <line class="wire" x1="442" y1="719" x2="518" y2="719" marker-end="url(#a)"/>
+        <text class="label" x="452" y="712">writes</text>
+
+        <!-- Credentials -->
+        <rect class="side" x="520" y="755" width="210" height="44" rx="6"/>
+        <text class="name" x="534" y="774">Credential Manager</text>
+        <text class="detail" x="534" y="790">Telegram · Gmail · WhatsApp keys</text>
+        <line class="wire" x1="518" y1="777" x2="442" y2="777" marker-end="url(#a)"/>
+        <text class="label" x="452" y="770">secrets</text>
+
+        <!-- External: delivery -->
+        <line class="wire ext" x1="160" y1="799" x2="115" y2="866" marker-end="url(#ae)"/>
+        <line class="wire ext" x1="240" y1="799" x2="320" y2="866" marker-end="url(#ae)"/>
+        <line class="wire ext" x1="320" y1="799" x2="525" y2="866" marker-end="url(#ae)"/>
+        <text class="label" x="452" y="826">HTTPS APIs</text>
+        <rect class="ext" x="40" y="868" width="160" height="46" rx="6"/>
+        <text class="extname" x="56" y="888">Telegram</text>
+        <text class="detail" x="56" y="905">full digest, your bot</text>
+        <rect class="ext" x="245" y="868" width="160" height="46" rx="6"/>
+        <text class="extname" x="261" y="888">Gmail</text>
+        <text class="detail" x="261" y="905">full digest, HTML email</text>
+        <rect class="ext" x="450" y="868" width="180" height="46" rx="6"/>
+        <text class="extname" x="466" y="888">WhatsApp</text>
+        <text class="detail" x="466" y="905">Cloud API · 1-message summary</text>
+      </svg>
+    </div>
+    <div class="key">
+      <span><i class="sw code"></i>Plain code, seconds</span>
+      <span><i class="sw llm"></i>Calls the local model, minutes</span>
+      <span><i class="sw ext"></i>Outside the laptop</span>
+    </div>
+    <figcaption>Cheap code cuts about 2,400 feed items down to 50 before the model sees any of them. Only the four amber steps call Qwen3.5-4B, and each call does one small job. Counts and times are from the first full runs on 6 October 2026.</figcaption>
+  </figure>
+
+  <section class="budget">
+    <h2>Where the run time goes</h2>
+    <div class="bar" role="img" aria-label="Run time of the 6 October full run: triage 12.0 minutes, merge duplicates 1.8, summarise and TL;DR 9.6, everything else 0.2, 23.6 minutes in total.">
+      <div class="seg t" style="flex:12.0">triage</div>
+      <div class="seg m" style="flex:1.8"></div>
+      <div class="seg s" style="flex:9.6">summarise</div>
+      <div class="seg o" style="flex:0.2"></div>
+    </div>
+    <div class="legend">
+      <div><b>12.0 m</b>Triage, 50 items</div>
+      <div><b>1.8 m</b>Merge duplicates</div>
+      <div><b>9.6 m</b>Summarise 12 + TL;DR</div>
+      <div><b>0.2 m</b>Collect, filter, fetch, send</div>
+    </div>
+    <p class="note">The model writes about 5 tokens a second on this CPU, so writing the output is the cost. Lowering <code>max_triage</code> or <code>top_n</code> in config.yaml is the quickest way to shorten a run.</p>
+  </section>
+
+  <section>
+    <h2>Why it's built this way</h2>
+    <div class="principles">
+      <div><h3>Code narrows, the model judges</h3><p>Filtering by date, keywords and history is free. The model only reads items that already look promising.</p></div>
+      <div><h3>One small job per call</h3><p>A 4B model scores one item, answers one yes/no or summarises one article at a time. JSON schemas keep its answers parseable.</p></div>
+      <div><h3>Summaries stay grounded</h3><p>The model sees only the article text and is told not to add outside knowledge. Every story links to its source.</p></div>
+      <div><h3>Failures are skipped, not fatal</h3><p>A dead feed, a blocked article, a bad JSON reply or an unconfigured channel is logged, and the digest still goes out.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where things live</h2>
+    <div class="table">
+      <table>
+        <thead><tr><th>Path in C:\Users\TMY\ai-news-agent</th><th>What it holds</th></tr></thead>
+        <tbody>
+          <tr><td><code>agent\main.py</code></td><td>The pipeline, in the order shown above</td></tr>
+          <tr><td><code>agent\steps.py</code></td><td>The four model steps: triage, merge duplicates, summarise, TL;DR</td></tr>
+          <tr><td><code>agent\llm.py</code></td><td>Client for the local Ollama server; records speed per run</td></tr>
+          <tr><td><code>config.yaml</code></td><td>Model, item limits, delivery channels</td></tr>
+          <tr><td><code>sources.yaml</code></td><td>News feeds, their weights and keyword filtering</td></tr>
+          <tr><td><code>prompts\*.md</code></td><td>What counts as important and how summaries are written</td></tr>
+          <tr><td><code>run.ps1</code></td><td>What the scheduler runs: starts Ollama if needed, writes the log</td></tr>
+          <tr><td><code>setup_delivery.py</code></td><td>One-time Telegram, Gmail and WhatsApp setup, each with a test message</td></tr>
+          <tr><td><code>logs\</code></td><td>One log per run, kept for 30 days</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Updated 6 October 2026 · Qwen3.5-4B via Ollama on Windows 11</footer>
+</div>
+
+</body>
+</html>

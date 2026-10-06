@@ -1,0 +1,33 @@
+# --- Model (served by Ollama on this laptop) ---
+model: hf.co/unsloth/Qwen3.5-4B-GGUF:Q4_K_M
+# Optional bigger model used only for the final TL;DR, e.g. hf.co/unsloth/Qwen3.5-9B-GGUF:Q4_K_M
+digest_model: null
+ollama_url: http://localhost:11434
+num_thread: 6        # leave 2 threads free so the laptop stays usable
+num_ctx: 4096
+
+# --- Pipeline ---
+lookback_hours: 26   # only consider items newer than this
+max_triage: 50       # max items the LLM scores per run
+min_score: 6         # items below this never make the digest
+top_n: 12            # items summarised in the digest
+article_chars: 6000  # ~1500 tokens of article text per summary
+
+# --- Output ---
+output_dir: output
+db_path: data/news.db
+
+# Delivery. Telegram and email credentials are stored in Windows Credential Manager by
+# setup_delivery.py; a channel that hasn't been set up is skipped.
+telegram:
+  enabled: true
+email:
+  enabled: true
+
+# WhatsApp via the official Meta WhatsApp Cloud API. Credentials: setup_delivery.py whatsapp.
+# Sends a compact one-message digest using an approved message template (see README).
+whatsapp:
+  enabled: true
+  template: ai_news_digest   # template name exactly as created in WhatsApp Manager
+  language: en               # template language code
+  api_version: v23.0
